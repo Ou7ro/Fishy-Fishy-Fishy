@@ -5,7 +5,9 @@ from environs import env
 from product_service import (
     get_fishes_from_strapi,
     get_description_from_strapi,
-    get_picture_bytes_from_strapi
+    get_picture_bytes_from_strapi,
+    get_or_create_cart,
+    add_cart_product,
     )
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -52,18 +54,28 @@ def show_product_description(update, context):
     query = update.callback_query
     query.answer()
 
-    context.bot.delete_message(
-        chat_id=query.message.chat_id,
-        message_id=query.message.message_id
-    )
+    try:
+        context.bot.delete_message(
+            chat_id=query.message.chat_id,
+            message_id=query.message.message_id
+        )
+    except Exception as e:
+        logger.warning(f"Не удалось удалить сообщение: {e}")
 
     fish_document_id = query.data
     fish_description = get_description_from_strapi(fish_document_id)
 
     image_bytes = get_picture_bytes_from_strapi(fish_document_id)
 
-    keyboard = [[InlineKeyboardButton('Назад', callback_data='back_to_menu')]]
+    context.user_data['current_product'] = fish_document_id
+
+    keyboard = [
+        [InlineKeyboardButton('Добавить в корзину', callback_data=f'buy_{fish_document_id}')],
+        [InlineKeyboardButton('Назад', callback_data='back_to_menu')]
+    ]
+
     reply_markup = InlineKeyboardMarkup(keyboard)
+
     if image_bytes:
         image_file = BytesIO(image_bytes)
         image_file.name = f'product_image_{fish_document_id}.jpg'
@@ -76,6 +88,45 @@ def show_product_description(update, context):
         )
     else:
         query.message.reply_text(fish_description, reply_markup=reply_markup)
+    return "HANDLE_DESCRIPTION"
+
+
+def handle_description(update, context):
+    """
+    Обрабатывает действия в описании товара.
+    """
+    query = update.callback_query
+    query.answer()
+
+    data = query.data
+
+    if data == 'back_to_menu':
+        try:
+            context.bot.delete_message(
+                chat_id=query.message.chat_id,
+                message_id=query.message.message_id
+            )
+        except Exception as e:
+            logger.warning(f"Не удалось удалить сообщение: {e}")
+        return start(update, context)
+
+    elif data.startswith('buy_'):
+        product_documents_id = data.split('_')[1]
+        tg_id = str(query.message.chat_id)
+
+        cart_documents_id = get_or_create_cart(tg_id)
+        add_cart_product(cart_documents_id, product_documents_id, 1.0)
+        context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=f"Товар добавлен в корзину!\n\n"
+                 f"Что хотите сделать дальше?",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton('Продолжить покупки', callback_data='back_to_menu')],
+                [InlineKeyboardButton('Вернуться к описанию', callback_data=f'{product_documents_id}')]
+            ])
+        )
+
+        return "HANDLE_DESCRIPTION"
     return "HANDLE_DESCRIPTION"
 
 
@@ -120,7 +171,7 @@ def handle_users_reply(update, context):
     states_functions = {
         'START': start,
         'HANDLE_MENU': show_product_description,
-        'HANDLE_DESCRIPTION': lambda update, context: None,
+        'HANDLE_DESCRIPTION': handle_description,
     }
 
     state_handler = states_functions.get(user_state, start)
