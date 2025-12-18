@@ -98,8 +98,15 @@ def get_picture_bytes_from_strapi(document_id: str) -> bytes:
     return image_response.content
 
 
-def get_or_create_cart(tg_id: str):
+def get_or_create_cart(tg_id: str) -> str:
+    """
+    Получает идентификатор корзины (documentId) пользователя по его Telegram ID.
+    Args:
+        tg_id (str): Уникальный идентификатор пользователя в Telegram.
 
+    Returns:
+        str: Уникальный идентификатор корзины (documentId) в формате строки.
+    """
     env.read_env()
     strapi_url = env.str('STRAPI_URL', 'http://localhost:1337')
     strapi_token = env.str('STRAPI_TOKEN')
@@ -144,8 +151,19 @@ def get_or_create_cart(tg_id: str):
         return cart_documents_id
 
 
+def add_cart_product(cart_documents_id: str, product_documents_id: str, quantity: float):
+    """
+    Добавляет продукт в существующую корзину пользователя через API Strapi v5.
 
-def add_cart_product(cart_documents_id: str, product_documents_id: str, quantity: float) -> dict:
+    Функция создаёт новую запись в коллекции 'cart-products', устанавливая связь
+    между корзиной и продуктом с указанным количеством. Использует формат связей Strapi v5
+    с использованием ключа 'connect' для привязки существующих записей по их documentId.
+
+    Args:
+        cart_documents_id (str): Уникальный идентификатор корзины (documentId) в Strapi.
+        product_documents_id (str): Уникальный идентификатор продукта (documentId) в Strapi.
+        quantity (float): Количество добавляемого продукта.
+    """
     env.read_env()
     strapi_url = env.str('STRAPI_URL', 'http://localhost:1337')
     strapi_token = env.str('STRAPI_TOKEN')
