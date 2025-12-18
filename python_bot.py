@@ -99,7 +99,6 @@ def handle_description(update, context):
     data = query.data
 
     if data == 'back_to_menu':
-        query.answer("Возвращаемся в меню...", show_alert=False)
         try:
             context.bot.delete_message(
                 chat_id=query.message.chat_id,
@@ -115,12 +114,8 @@ def handle_description(update, context):
 
         cart_documents_id = get_or_create_cart(tg_id)
         add_cart_product(cart_documents_id, product_documents_id, 1.0)
-        
-        query.answer("✅ Товар добавлен в корзину!", show_alert=False)
-        
+        query.answer("Товар добавлен в корзину!", show_alert=False)
         return "HANDLE_DESCRIPTION"
-    
-    query.answer("Обработка...", show_alert=False)
     return "HANDLE_DESCRIPTION"
 
 
