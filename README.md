@@ -26,7 +26,11 @@ Telegram Bot Token (получить у @BotFather)
 Установите зависимости:
 
 ```bash
-pip install python-telegram-bot redis environs requests
+pip install -r requirements.txt
+```
+или же
+```bash
+uv sync
 ```
 
 Настройте переменные окружения (см. раздел 3)
