@@ -102,10 +102,10 @@ python python_bot.py
 
 Убедитесь, что в Strapi созданы следующие Content Types:
 
-products (с полями: title, price, description, picture)
+`products` (с полями: title, price, description, picture)
 
-carts (с полями: tg_id, email, cart_products relation)
+`carts` (с полями: tg_id, email, cart_products relation)
 
-cart-products (с полями: quantity, cart relation, product relation)
+`cart-products` (с полями: quantity, cart relation, product relation)
 
-orders (с полями: email, cart relation)
+`orders` (с полями: email, cart relation)
