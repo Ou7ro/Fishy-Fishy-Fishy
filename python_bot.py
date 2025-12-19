@@ -8,6 +8,10 @@ from product_service import (
     get_picture_bytes_from_strapi,
     get_or_create_cart,
     add_cart_product,
+    get_cart_content_with_details,
+    delete_cart_product,
+    update_cart_with_email,
+    create_order
     )
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -31,6 +35,7 @@ def start(update, context):
             callback_data=str(fish_document_id)
         )
         buttons.append([button])
+    buttons.append([InlineKeyboardButton('Моя Корзина', callback_data='view_cart')])
 
     reply_markup = InlineKeyboardMarkup(buttons)
 
@@ -43,6 +48,86 @@ def start(update, context):
     return "HANDLE_MENU"
 
 
+def show_cart(update, context, edit=False):
+    """
+    Показывает содержимое корзины пользователя.
+    """
+    query = update.callback_query
+
+    if query:
+        query.answer("Загружаем корзину...", show_alert=False)
+
+        if not edit:
+            try:
+                context.bot.delete_message(
+                    chat_id=query.message.chat_id,
+                    message_id=query.message.message_id
+                )
+            except Exception as e:
+                logger.warning(f"Не удалось удалить сообщение: {e}")
+
+    tg_id = str(query.message.chat_id) if query else str(update.message.chat_id)
+
+    cart_document_id = get_or_create_cart(tg_id)
+
+    try:
+        cart_content = get_cart_content_with_details(cart_document_id)
+    except Exception as e:
+        logger.error(f"Ошибка получения корзины: {e}")
+        cart_content = {'items': [], 'total_sum': 0}
+
+    if not cart_content['items']:
+        cart_message = "🛒 *Ваша корзина пуста*"
+        keyboard = [
+            [InlineKeyboardButton('Назад к выбору', callback_data='back_to_menu')]
+        ]
+    else:
+        lines = ["🛒 *Ваша корзина:*\n"]
+
+        for i, item in enumerate(cart_content['items'], 1):
+            lines.append(
+                f"{i}. *{item['title']}*\n"
+                f"   Количество: {item['quantity']} × {item['price']} руб. = {item['total']} руб."
+            )
+
+        lines.append(f"\n*Итого:* {cart_content['total_sum']} руб.")
+        cart_message = "\n".join(lines)
+
+        keyboard = []
+        for item in cart_content['items']:
+            keyboard.append([
+                InlineKeyboardButton(
+                    f"❌ Удалить {item['title']}",
+                    callback_data=f"remove_{item['cart_product_id']}"
+                )
+            ])
+
+        keyboard.append([
+            InlineKeyboardButton('Очистить корзину', callback_data='clear_cart'),
+            InlineKeyboardButton('Оплатить', callback_data='pay')
+        ])
+        keyboard.append([
+            InlineKeyboardButton('Назад к выбору', callback_data='back_to_menu')
+        ])
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    if query and edit:
+        query.edit_message_text(
+            text=cart_message,
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+    else:
+        context.bot.send_message(
+            chat_id=query.message.chat_id if query else update.message.chat_id,
+            text=cart_message,
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+    return "HANDLE_CART"
+
+
 def show_product_description(update, context):
     """
     Обрабатывает нажатие на кнопку с выбором продукта в телеграм-боте и отображает его описание.
@@ -53,6 +138,9 @@ def show_product_description(update, context):
     """
     query = update.callback_query
     query.answer()
+
+    if query.data == 'view_cart':
+        return show_cart(update, context)
 
     try:
         context.bot.delete_message(
@@ -71,6 +159,7 @@ def show_product_description(update, context):
 
     keyboard = [
         [InlineKeyboardButton('Добавить в корзину', callback_data=f'buy_{fish_document_id}')],
+        [InlineKeyboardButton('Моя Корзина', callback_data='view_cart')],
         [InlineKeyboardButton('Назад', callback_data='back_to_menu')]
     ]
 
@@ -109,13 +198,16 @@ def handle_description(update, context):
         return start(update, context)
 
     elif data.startswith('buy_'):
-        product_documents_id = data.split('_')[1]
+        product_document_id = data.split('_')[1]
         tg_id = str(query.message.chat_id)
 
-        cart_documents_id = get_or_create_cart(tg_id)
-        add_cart_product(cart_documents_id, product_documents_id, 1.0)
+        cart_document_id = get_or_create_cart(tg_id)
+        add_cart_product(cart_document_id, product_document_id, 1.0)
         query.answer("Товар добавлен в корзину!", show_alert=False)
         return "HANDLE_DESCRIPTION"
+    elif data == 'view_cart':
+        return show_cart(update, context)
+
     return "HANDLE_DESCRIPTION"
 
 
@@ -161,6 +253,8 @@ def handle_users_reply(update, context):
         'START': start,
         'HANDLE_MENU': show_product_description,
         'HANDLE_DESCRIPTION': handle_description,
+        'HANDLE_CART': handle_cart,
+        'WAITING_EMAIL': waiting_for_email,
     }
 
     state_handler = states_functions.get(user_state, start)
@@ -188,6 +282,148 @@ def get_database_connection():
             decode_responses=True
         )
     return _database
+
+
+def handle_cart(update, context):
+    """
+    Обрабатывает действия в корзине.
+    """
+    query = update.callback_query
+    data = query.data
+
+    if data == 'back_to_menu':
+        try:
+            context.bot.delete_message(
+                chat_id=query.message.chat_id,
+                message_id=query.message.message_id
+            )
+        except Exception as e:
+            logger.warning(f"Не удалось удалить сообщение: {e}")
+        return start(update, context)
+
+    elif data.startswith('remove_'):
+        cart_product_id = data.split('_')[1]
+
+        try:
+            delete_cart_product(cart_product_id)
+            query.answer("✅ Товар удален из корзины", show_alert=False)
+        except Exception as e:
+            logger.error(f"Ошибка удаления товара: {e}")
+            query.answer("Ошибка удаления товара", show_alert=True)
+            return "HANDLE_CART"
+        return show_cart(update, context, edit=True)
+
+    elif data == 'clear_cart':
+        tg_id = str(query.message.chat_id)
+        cart_document_id = get_or_create_cart(tg_id)
+
+        try:
+            cart_content = get_cart_content_with_details(cart_document_id)
+            for item in cart_content['items']:
+                delete_cart_product(item['cart_product_id'])
+            query.answer("✅ Корзина очищена", show_alert=False)
+        except Exception as e:
+            logger.error(f"Ошибка очистки корзины: {e}")
+            query.answer("❌ Ошибка очистки корзины", show_alert=True)
+            return "HANDLE_CART"
+        return show_cart(update, context, edit=False)
+
+    elif data == 'pay':
+        query.answer("Переходим к оплате...", show_alert=False)
+
+        try:
+            context.bot.delete_message(
+                chat_id=query.message.chat_id,
+                message_id=query.message.message_id
+            )
+        except Exception as e:
+            logger.warning(f"Не удалось удалить сообщение: {e}")
+
+        context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text="*Оформление заказа*\n\n"
+                 "Для оформления заказа, пожалуйста, укажите ваш email:\n"
+                 "(Пример: example@email.com)",
+            parse_mode="Markdown"
+        )
+
+        return "WAITING_EMAIL"
+
+    query.answer()
+    return "HANDLE_CART"
+
+
+def waiting_for_email(update, context):
+    """
+    Обрабатывает ввод email пользователем.
+    """
+    if update.message:
+        email = update.message.text.strip()
+
+        if '@' not in email or '.' not in email:
+            update.message.reply_text(
+                "❌ Пожалуйста, введите корректный email адрес.\n"
+                "Пример: example@email.com"
+            )
+            return "WAITING_EMAIL"
+
+        tg_id = str(update.message.chat_id)
+        try:
+            cart_document_id = get_or_create_cart(tg_id)
+            logger.info(f"Cart document ID: {cart_document_id}")
+
+            cart_content = get_cart_content_with_details(cart_document_id)
+            logger.info(f"Cart content: {cart_content}")
+
+            order = create_order(cart_document_id, email)
+            logger.info(f"Order created: {order}")
+
+            items_list = ""
+            if cart_content['items']:
+                items_list = "\n".join([
+                    f"   • {item['title']} - {item['quantity']} шт. × {item['price']} руб."
+                    for item in cart_content['items']
+                ])
+                items_list = f"\n*Состав заказа:*\n{items_list}\n\n"
+
+            success_message = (
+                "✅ *Заказ успешно оформлен!*\n\n"
+                f"Ваш email: `{email}`\n"
+                f"Номер заказа: `{order.get('documentId')}`\n"
+                f"Сумма заказа: *{cart_content['total_sum']} руб.*\n"
+                f"Товаров в заказе: *{len(cart_content['items'])}*\n"
+                f"{items_list}"
+                "Спасибо за покупку!"
+            )
+
+            for item in cart_content['items']:
+                delete_cart_product(item['cart_product_id'])
+
+            update.message.reply_text(
+                success_message,
+                parse_mode="Markdown"
+            )
+
+            return start(update, context)
+
+        except Exception as e:
+            logger.error(f"Ошибка при оформлении заказа: {e}", exc_info=True)
+            update.message.reply_text(
+                f"❌ Произошла ошибка при оформлении заказа: {str(e)}"
+            )
+            return start(update, context)
+    elif update.callback_query:
+        query = update.callback_query
+        query.answer()
+
+        query.edit_message_text(
+            text="❌ Оформление заказа отменено.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton('Вернуться в меню', callback_data='back_to_menu')]
+            ])
+        )
+        return "HANDLE_MENU"
+    return "WAITING_EMAIL"
 
 
 def main():
