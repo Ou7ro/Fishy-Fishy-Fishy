@@ -51,13 +51,17 @@ uv sync
 
 `DATABASE_PASSWORD` - Пароль Redis (по умолчанию: пустая строка)
 
-### Примеры запуска
+
+## Примеры запуска
 
 #### Локальный запуск с Strapi на той же машине
 
 ```bash
-# Установите зависимости
-pip install python-telegram-bot redis environs requests
+pip install -r requirements.txt
+```
+или же
+```bash
+uv sync
 ```
 
 #### Создайте .env файл с содержимым
