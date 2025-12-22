@@ -185,9 +185,9 @@ def handle_description(update, context):
     Обрабатывает действия в описании товара.
     """
     query = update.callback_query
-    data = query.data
+    button_callback = query.data
 
-    if data == 'back_to_menu':
+    if button_callback == 'back_to_menu':
         try:
             context.bot.delete_message(
                 chat_id=query.message.chat_id,
@@ -197,15 +197,15 @@ def handle_description(update, context):
             logger.warning(f"Не удалось удалить сообщение: {e}")
         return start(update, context)
 
-    elif data.startswith('buy_'):
-        product_document_id = data.split('_')[1]
+    elif button_callback.startswith('buy_'):
+        product_document_id = button_callback.split('_')[1]
         tg_id = str(query.message.chat_id)
 
         cart_document_id = get_or_create_cart(tg_id)
         add_cart_product(cart_document_id, product_document_id, 1.0)
         query.answer("Товар добавлен в корзину!", show_alert=False)
         return "HANDLE_DESCRIPTION"
-    elif data == 'view_cart':
+    elif button_callback == 'view_cart':
         return show_cart(update, context)
 
     return "HANDLE_DESCRIPTION"
@@ -289,9 +289,9 @@ def handle_cart(update, context):
     Обрабатывает действия в корзине.
     """
     query = update.callback_query
-    data = query.data
+    button_callback = query.data
 
-    if data == 'back_to_menu':
+    if button_callback == 'back_to_menu':
         try:
             context.bot.delete_message(
                 chat_id=query.message.chat_id,
@@ -301,8 +301,8 @@ def handle_cart(update, context):
             logger.warning(f"Не удалось удалить сообщение: {e}")
         return start(update, context)
 
-    elif data.startswith('remove_'):
-        cart_product_id = data.split('_')[1]
+    elif button_callback.startswith('remove_'):
+        cart_product_id = button_callback.split('_')[1]
 
         try:
             delete_cart_product(cart_product_id)
@@ -313,7 +313,7 @@ def handle_cart(update, context):
             return "HANDLE_CART"
         return show_cart(update, context, edit=True)
 
-    elif data == 'clear_cart':
+    elif button_callback == 'clear_cart':
         tg_id = str(query.message.chat_id)
         cart_document_id = get_or_create_cart(tg_id)
 
@@ -328,7 +328,7 @@ def handle_cart(update, context):
             return "HANDLE_CART"
         return show_cart(update, context, edit=False)
 
-    elif data == 'pay':
+    elif button_callback == 'pay':
         query.answer("Переходим к оплате...", show_alert=False)
 
         try:
