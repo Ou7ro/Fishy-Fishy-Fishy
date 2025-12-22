@@ -11,7 +11,8 @@ from product_service import (
     get_cart_content_with_details,
     delete_cart_product,
     update_cart_with_email,
-    create_order
+    create_order,
+    init_strapi_client
     )
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -434,6 +435,10 @@ def main():
     env.read_env()
 
     tg_bot_token = env.str('TG_BOT_TOKEN')
+    strapi_url = env.str('STRAPI_URL', 'http://localhost:1337')
+    strapi_token = env.str('STRAPI_TOKEN')
+
+    init_strapi_client(strapi_url, strapi_token)
 
     logger.info('Бот запущен')
 

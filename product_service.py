@@ -1,17 +1,26 @@
 import requests
-from environs import Env
 
 
-env = Env()
-env.read_env()
+_STRAPI_URL = None
+_STRAPI_TOKEN = None
+_BASE_HEADERS = None
+_JSON_HEADERS = None
 
-_STRAPI_URL = env.str('STRAPI_URL', 'http://localhost:1337')
-_STRAPI_TOKEN = env.str('STRAPI_TOKEN')
-_BASE_HEADERS = {"Authorization": f"Bearer {_STRAPI_TOKEN}"}
-_JSON_HEADERS = {
-    "Authorization": f"Bearer {_STRAPI_TOKEN}",
-    "Content-Type": "application/json"
-}
+
+def init_strapi_client(strapi_url: str, strapi_token: str):
+    """
+    Инициализирует клиент Strapi с переданными параметрами.
+    Должна быть вызвана один раз перед использованием других функций.
+    """
+    global _STRAPI_URL, _STRAPI_TOKEN, _BASE_HEADERS, _JSON_HEADERS
+
+    _STRAPI_URL = strapi_url
+    _STRAPI_TOKEN = strapi_token
+    _BASE_HEADERS = {"Authorization": f"Bearer {strapi_token}"}
+    _JSON_HEADERS = {
+        "Authorization": f"Bearer {strapi_token}",
+        "Content-Type": "application/json"
+    }
 
 
 def get_fishes_from_strapi() -> list:
@@ -85,14 +94,14 @@ def get_picture_bytes_from_strapi(document_id: str) -> bytes:
     pictures = product_entities['data'].get('picture', [])
     if not pictures:
         return None
-        
+
     first_picture = pictures[0]
     picture_url = first_picture.get('url')
 
     if picture_url:
         if picture_url.startswith('/'):
             picture_url = f"{_STRAPI_URL}{picture_url}"
-    
+
     image_response = requests.get(picture_url, headers=_BASE_HEADERS)
     image_response.raise_for_status()
 
