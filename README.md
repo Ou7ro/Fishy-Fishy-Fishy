@@ -8,9 +8,7 @@
 Оформлять заказы с указанием email
 Получать подтверждение заказа с деталями покупки
 
-## Запуск
-
-Предварительные требования:
+## Предварительные требования
 Python 3.8+
 
 Установленный Redis (для хранения состояния диалога)
@@ -21,20 +19,16 @@ Telegram Bot Token (получить у @BotFather)
 
 ## Установка
 
-Клонируйте репозиторий или скачайте файлы проекта
+Клонируйте репозиторий и скачайте файлы проекта
 
 Установите зависимости:
 
 ```bash
-pip install python-telegram-bot redis environs requests
+pip install -r requirements.txt
 ```
-
-Настройте переменные окружения (см. раздел 3)
-
-Запустите бота:
-
+или же
 ```bash
-python python_bot.py
+uv sync
 ```
 
 ## Переменные окружения
@@ -57,13 +51,17 @@ python python_bot.py
 
 `DATABASE_PASSWORD` - Пароль Redis (по умолчанию: пустая строка)
 
-### Примеры запуска
+
+## Примеры запуска
 
 #### Локальный запуск с Strapi на той же машине
 
 ```bash
-# Установите зависимости
-pip install python-telegram-bot redis environs requests
+pip install -r requirements.txt
+```
+или же
+```bash
+uv sync
 ```
 
 #### Создайте .env файл с содержимым
@@ -104,10 +102,10 @@ python python_bot.py
 
 Убедитесь, что в Strapi созданы следующие Content Types:
 
-products (с полями: title, price, description, picture)
+`products` (с полями: title, price, description, picture)
 
-carts (с полями: tg_id, email, cart_products relation)
+`carts` (с полями: tg_id, email, cart_products relation)
 
-cart-products (с полями: quantity, cart relation, product relation)
+`cart-products` (с полями: quantity, cart relation, product relation)
 
-orders (с полями: email, cart relation)
+`orders` (с полями: email, cart relation)
