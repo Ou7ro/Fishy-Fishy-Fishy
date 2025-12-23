@@ -2,18 +2,7 @@ import logging
 import redis
 from io import BytesIO
 from environs import env
-from product_service import (
-    get_fishes_from_strapi,
-    get_description_from_strapi,
-    get_picture_bytes_from_strapi,
-    get_or_create_cart,
-    add_cart_product,
-    get_cart_content_with_details,
-    delete_cart_product,
-    update_cart_with_email,
-    create_order,
-    init_strapi_client
-    )
+from product_service import StrapiClient
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Filters, Updater
@@ -25,7 +14,9 @@ logger = logging.getLogger(__name__)
 
 
 def start(update, context):
-    fishes = get_fishes_from_strapi()
+    strapi_client = context.bot_data['strapi_client']
+    fishes = strapi_client.get_fishes_from_strapi()
+
     buttons = []
     for fish in fishes:
         fish_document_id = fish['documentId']
@@ -54,6 +45,7 @@ def show_cart(update, context, edit=False):
     Показывает содержимое корзины пользователя.
     """
     query = update.callback_query
+    strapi_client = context.bot_data['strapi_client']
 
     if query:
         query.answer("Загружаем корзину...", show_alert=False)
@@ -69,10 +61,10 @@ def show_cart(update, context, edit=False):
 
     tg_id = str(query.message.chat_id) if query else str(update.message.chat_id)
 
-    cart_document_id = get_or_create_cart(tg_id)
+    cart_document_id = strapi_client.get_or_create_cart(tg_id)
 
     try:
-        cart_content = get_cart_content_with_details(cart_document_id)
+        cart_content = strapi_client.get_cart_content_with_details(cart_document_id)
     except Exception as e:
         logger.error(f"Ошибка получения корзины: {e}")
         cart_content = {'items': [], 'total_sum': 0}
@@ -139,6 +131,7 @@ def show_product_description(update, context):
     """
     query = update.callback_query
     query.answer()
+    strapi_client = context.bot_data['strapi_client']
 
     if query.data == 'view_cart':
         return show_cart(update, context)
@@ -152,9 +145,9 @@ def show_product_description(update, context):
         logger.warning(f"Не удалось удалить сообщение: {e}")
 
     fish_document_id = query.data
-    fish_description = get_description_from_strapi(fish_document_id)
+    fish_description = strapi_client.get_description_from_strapi(fish_document_id)
 
-    image_bytes = get_picture_bytes_from_strapi(fish_document_id)
+    image_bytes = strapi_client.get_picture_bytes_from_strapi(fish_document_id)
 
     context.user_data['current_product'] = fish_document_id
 
@@ -187,6 +180,7 @@ def handle_description(update, context):
     """
     query = update.callback_query
     button_callback = query.data
+    strapi_client = context.bot_data['strapi_client']
 
     if button_callback == 'back_to_menu':
         try:
@@ -202,8 +196,8 @@ def handle_description(update, context):
         product_document_id = button_callback.split('_')[1]
         tg_id = str(query.message.chat_id)
 
-        cart_document_id = get_or_create_cart(tg_id)
-        add_cart_product(cart_document_id, product_document_id, 1.0)
+        cart_document_id = strapi_client.get_or_create_cart(tg_id)
+        strapi_client.add_cart_product(cart_document_id, product_document_id, 1.0)
         query.answer("Товар добавлен в корзину!", show_alert=False)
         return "HANDLE_DESCRIPTION"
     elif button_callback == 'view_cart':
@@ -291,6 +285,7 @@ def handle_cart(update, context):
     """
     query = update.callback_query
     button_callback = query.data
+    strapi_client = context.bot_data['strapi_client']
 
     if button_callback == 'back_to_menu':
         try:
@@ -306,7 +301,7 @@ def handle_cart(update, context):
         cart_product_id = button_callback.split('_')[1]
 
         try:
-            delete_cart_product(cart_product_id)
+            strapi_client.delete_cart_product(cart_product_id)
             query.answer("✅ Товар удален из корзины", show_alert=False)
         except Exception as e:
             logger.error(f"Ошибка удаления товара: {e}")
@@ -316,12 +311,12 @@ def handle_cart(update, context):
 
     elif button_callback == 'clear_cart':
         tg_id = str(query.message.chat_id)
-        cart_document_id = get_or_create_cart(tg_id)
+        cart_document_id = strapi_client.get_or_create_cart(tg_id)
 
         try:
-            cart_content = get_cart_content_with_details(cart_document_id)
+            cart_content = strapi_client.get_cart_content_with_details(cart_document_id)
             for item in cart_content['items']:
-                delete_cart_product(item['cart_product_id'])
+                strapi_client.delete_cart_product(item['cart_product_id'])
             query.answer("✅ Корзина очищена", show_alert=False)
         except Exception as e:
             logger.error(f"Ошибка очистки корзины: {e}")
@@ -358,6 +353,8 @@ def waiting_for_email(update, context):
     """
     Обрабатывает ввод email пользователем.
     """
+    strapi_client = context.bot_data['strapi_client']
+
     if update.message:
         email = update.message.text.strip()
 
@@ -370,13 +367,13 @@ def waiting_for_email(update, context):
 
         tg_id = str(update.message.chat_id)
         try:
-            cart_document_id = get_or_create_cart(tg_id)
+            cart_document_id = strapi_client.get_or_create_cart(tg_id)
             logger.info(f"Cart document ID: {cart_document_id}")
 
-            cart_content = get_cart_content_with_details(cart_document_id)
+            cart_content = strapi_client.get_cart_content_with_details(cart_document_id)
             logger.info(f"Cart content: {cart_content}")
 
-            order = create_order(cart_document_id, email)
+            order = strapi_client.create_order(cart_document_id, email)
             logger.info(f"Order created: {order}")
 
             items_list = ""
@@ -398,7 +395,7 @@ def waiting_for_email(update, context):
             )
 
             for item in cart_content['items']:
-                delete_cart_product(item['cart_product_id'])
+                strapi_client.delete_cart_product(item['cart_product_id'])
 
             update.message.reply_text(
                 success_message,
@@ -438,12 +435,14 @@ def main():
     strapi_url = env.str('STRAPI_URL', 'http://localhost:1337')
     strapi_token = env.str('STRAPI_TOKEN')
 
-    init_strapi_client(strapi_url, strapi_token)
-
     logger.info('Бот запущен')
 
     updater = Updater(tg_bot_token)
     dispatcher = updater.dispatcher
+
+    strapi_client = StrapiClient(strapi_url, strapi_token)
+    dispatcher.bot_data['strapi_client'] = strapi_client
+
     dispatcher.add_handler(CallbackQueryHandler(handle_users_reply))
     dispatcher.add_handler(MessageHandler(Filters.text, handle_users_reply))
     dispatcher.add_handler(CommandHandler('start', handle_users_reply))
